@@ -25,15 +25,24 @@ spec:
         storageClassName: {{ .Values.instanceStorageClassName | quote }}
         {{- end }}
         accessModes:
-        - "ReadWriteOnce"
+          - "ReadWriteOnce"
         resources:
           requests:
-            storage: {{ default "1Gi" .Values.instanceSize | quote }}
-      {{- if or .Values.instanceMemory .Values.instanceCPU }}
+            storage: {{ default "8Gi" .Values.instanceSize | quote }}
+      {{- if or .Values.instanceResourceLimits .Values.instanceResourceRequests }}
       resources:
+        {{- if or .Values.instanceResourceRequests }}
+        requests:
+        {{- toYaml .Values.instanceResourceRequests | nindent 10}}
+        {{- end }}
+        {{- if or .Values.instanceResourceLimits }}
         limits:
-          cpu: {{ default "" .Values.instanceCPU | quote }}
-          memory: {{ default "" .Values.instanceMemory | quote }}
+        {{- toYaml .Values.instanceResourceLimits | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.instanceTolerations }}
+      tolerations:
+      {{- toYaml .Values.instanceTolerations | nindent 8 }}
       {{- end }}
   {{- end }}
   backups:
@@ -45,8 +54,8 @@ spec:
 {{ toYaml .Values.pgBackRestConfig | indent 6 }}
       {{- else if .Values.multiBackupRepos }}
       configuration:
-      - secret:
-          name: {{ default .Release.Name .Values.name }}-pgbackrest-secret
+        - secret:
+            name: {{ default .Release.Name .Values.name }}-pgbackrest-secret
       global:
         {{- range $index, $repo := .Values.multiBackupRepos }}
         {{- if or $repo.s3 $repo.gcs $repo.azure }}
@@ -55,79 +64,79 @@ spec:
         {{- end }}
       repos:
       {{- range $index, $repo := .Values.multiBackupRepos }}
-      - name: repo{{ add $index 1 }}
+        - name: repo{{ add $index 1 }}
         {{- if $repo.volume }}
-        volume:
-          volumeClaimSpec:
+          volume:
+            volumeClaimSpec:
             {{- if $repo.volume.backupsStorageClassName }}
-            storageClassName: {{ .Values.backupsStorageClassName | quote }}
+              storageClassName: {{ .Values.backupsStorageClassName | quote }}
             {{- end }}
-            accessModes:
-            - "ReadWriteOnce"
-            resources:
-              requests:
-                storage: {{ default "1Gi" $repo.volume.backupsSize | quote }}
+              accessModes:
+                - "ReadWriteOnce"
+              resources:
+                requests:
+                  storage: {{ default "1Gi" $repo.volume.backupsSize | quote }}
         {{- else if $repo.s3 }}
-        s3:
-          bucket: {{ $repo.s3.bucket | quote }}
-          endpoint: {{ $repo.s3.endpoint | quote }}
-          region: {{ $repo.s3.region | quote }}
+          s3:
+            bucket: {{ $repo.s3.bucket | quote }}
+            endpoint: {{ $repo.s3.endpoint | quote }}
+            region: {{ $repo.s3.region | quote }}
         {{- else if $repo.gcs }}
-        gcs:
-          bucket: {{ $repo.gcs.bucket | quote }}
+          gcs:
+            bucket: {{ $repo.gcs.bucket | quote }}
         {{- else if $repo.azure }}
-        azure:
-          container: {{ $repo.azure.container | quote }}
+          azure:
+            container: {{ $repo.azure.container | quote }}
         {{- end }}
       {{- end }}
       {{- else if .Values.s3 }}
       configuration:
-      - secret:
-          name: {{ default .Release.Name .Values.name }}-pgbackrest-secret
+        - secret:
+            name: {{ default .Release.Name .Values.name }}-pgbackrest-secret
       global:
         repo1-path: /pgbackrest/{{ .Release.Namespace }}/{{ default .Release.Name .Values.name }}/repo1
         {{- if .Values.s3.encryptionPassphrase }}
         repo1-cipher-type: aes-256-cbc
         {{- end }}
       repos:
-      - name: repo1
-        s3:
-          bucket: {{ .Values.s3.bucket | quote }}
-          endpoint: {{ .Values.s3.endpoint | quote }}
-          region: {{ .Values.s3.region | quote }}
+        - name: repo1
+          s3:
+            bucket: {{ .Values.s3.bucket | quote }}
+            endpoint: {{ .Values.s3.endpoint | quote }}
+            region: {{ .Values.s3.region | quote }}
       {{- else if .Values.gcs }}
       configuration:
-      - secret:
-          name: {{ default .Release.Name .Values.name }}-pgbackrest-secret
+        - secret:
+            name: {{ default .Release.Name .Values.name }}-pgbackrest-secret
       global:
         repo1-path: /pgbackrest/{{ .Release.Namespace }}/{{ default .Release.Name .Values.name }}/repo1
       repos:
-      - name: repo1
-        gcs:
-          bucket: {{ .Values.gcs.bucket | quote }}
+        - name: repo1
+          gcs:
+            bucket: {{ .Values.gcs.bucket | quote }}
       {{- else if .Values.azure }}
       configuration:
-      - secret:
-          name: {{ default .Release.Name .Values.name }}-pgbackrest-secret
+        - secret:
+            name: {{ default .Release.Name .Values.name }}-pgbackrest-secret
       global:
         repo1-path: /pgbackrest/{{ .Release.Namespace }}/{{ default .Release.Name .Values.name }}/repo1
       repos:
-      - name: repo1
-        azure:
-          container: {{ .Values.azure.container | quote }}
+        - name: repo1
+          azure:
+            container: {{ .Values.azure.container | quote }}
       {{- else }}
       repos:
-      - name: repo1
-        volume:
-          volumeClaimSpec:
+        - name: repo1
+          volume:
+            volumeClaimSpec:
             {{- if .Values.backupsStorageClassName }}
-            storageClassName: {{ .Values.backupsStorageClassName | quote }}
+              storageClassName: {{ .Values.backupsStorageClassName | quote }}
             {{- end }}
-            accessModes:
-            - "ReadWriteOnce"
-            resources:
-              requests:
-                storage: {{ default "1Gi" .Values.backupsSize | quote }}
+              accessModes:
+                - "ReadWriteOnce"
+              resources:
+                requests:
+                  storage: {{ default "1Gi" .Values.backupsSize | quote }}
       {{- end }}
   {{- if or .Values.pgBouncerReplicas .Values.pgBouncerConfig }}
   proxy:
